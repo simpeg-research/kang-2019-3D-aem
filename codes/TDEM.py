@@ -28,6 +28,8 @@ class ProblemSkyTEM(Problem3D_e):
         base_frequency_LM=210,
 
     ):
+        if self.verbose:
+            print('{}\nSimulating SkyTEM data\n{}'.format('*'*50, '*'*50))
 
         self.model = m
         n_steps = self.timeSteps.size
@@ -64,7 +66,11 @@ class ProblemSkyTEM(Problem3D_e):
                 if ii != 0:
                     Ainv.clean()
                 A = self.getAdiag(dt, factor=factor)
-                Ainv = self.Solver(A)
+                if self.verbose:
+                    print('Factoring...   (dt = {:e})'.format(dt))
+                Ainv = self.Solver(A, **self.solverOpts)
+                if self.verbose:
+                    print('Done')
 
             # Need to integrate in to RHS and getAsubdiag
             if ii == 0:
@@ -77,7 +83,13 @@ class ProblemSkyTEM(Problem3D_e):
                 rhs = -factor/dt*(
                     self.MeSigma*(-4/3.*sol_n1+1/3.*sol_n0)
                 )
+            if self.verbose:
+                print('    Solving...   (tInd = {:d})'.format(ii+1))
+
             sol_n2 = Ainv*rhs
+
+            if self.verbose:
+                print('    Done...')
 
             # Need data matrix
             if nSrc > 1:
@@ -88,6 +100,9 @@ class ProblemSkyTEM(Problem3D_e):
             dt_0 = dt
             sol_n0 = sol_n1.copy()
             sol_n1 = sol_n2.copy()
+
+        # clean factors and return
+        Ainv.clean()
 
         period_HM = 1./base_frequency_HM
         period_LM = 1./base_frequency_LM
