@@ -254,11 +254,11 @@ def get_skytem_survey(
     rx_type_array = np.array([rx_type], dtype=str).repeat(n_sounding)
     wave_type_array = np.array([wave_type], dtype=str).repeat(n_sounding)
     field_type_array = np.array([field_type], dtype=str).repeat(n_sounding)
-    input_currents_list=[input_currents_HM for i in range(n_sounding)]
-    time_input_currents_list=[time_input_currents_HM for i in range(n_sounding)]
+    input_currents_list=[input_currents for i in range(n_sounding)]
+    time_input_currents_list=[time_input_currents for i in range(n_sounding)]
     base_frequency_array = np.array([base_frequency]).repeat(n_sounding)
-    input_currents_dual_moment_list =[input_currents_LM for i in range(n_sounding)]
-    time_input_currents_dual_moment_list =[time_input_currents_LM for i in range(n_sounding)]
+    input_currents_dual_moment_list =[input_currents_dual_moment for i in range(n_sounding)]
+    time_input_currents_dual_moment_list =[time_input_currents_dual_moment for i in range(n_sounding)]
     base_frequency_dual_moment_list = np.array([base_frequency_dual_moment]).repeat(n_sounding)
     moment_type_array = np.array([moment_type], dtype=str).repeat(n_sounding)
 
