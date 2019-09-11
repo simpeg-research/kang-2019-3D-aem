@@ -9,6 +9,8 @@ import os
 import multiprocess
 from multiprocess import Pool
 import warnings
+import dask.bag as db
+
 warnings.filterwarnings("ignore")
 
 class GlobalAEM(Problem.BaseProblem):
@@ -28,6 +30,7 @@ class GlobalAEM(Problem.BaseProblem):
     n_cpu = None
     verbose = False
     n_thread = None
+    parallel_option = 'multiprocess'
 
 
     def check_regular_mesh(self):
@@ -223,15 +226,24 @@ class GlobalSkyTEM(GlobalAEM):
         return run_simulation_skytem(i_src)
 
     def write_inputs_on_disk_pool(self):
-        pool = Pool(self.n_cpu)
-        n_src = self.n_sounding
-        out = pool.map(
-            self.write_inputs_on_disk,
-            [i_src for i_src in range(n_src)]
-        )
-        pool.close()
-        pool.join()
 
+        n_src = self.n_sounding
+
+        if self.parallel_option == 'multiprocess':
+            pool = Pool(self.n_cpu)
+            out = pool.map(
+                self.write_inputs_on_disk,
+                [i_src for i_src in range(n_src)]
+            )
+            pool.close()
+            pool.join()
+
+        elif self.parallel_option == 'dask':
+            b = db.from_sequence(
+                range(self.n_sounding), npartitions=np.ceil(self.n_sounding / self.n_cpu)
+            )
+            b = b.map(self.write_inputs_on_disk)
+            out = b.compute()
 
     def forward(self, m):
 
@@ -239,14 +251,21 @@ class GlobalSkyTEM(GlobalAEM):
 
         if self.verbose:
             print(">> Compute response")
+        if self.parallel_option == 'multiprocess':
+            pool = Pool(self.n_cpu)
+            # This assumes the same # of layer for each of soundings
+            results = pool.map(
+                run_simulation_skytem,
+                [(i_src, self.work_dir, self.n_thread) for i_src in range(self.n_sounding)]
+            )
+            pool.close()
+            pool.join()
 
-        pool = Pool(self.n_cpu)
-        # This assumes the same # of layer for each of soundings
-        result = pool.map(
-            run_simulation_skytem,
-            [(i_src, self.work_dir, self.n_thread) for i_src in range(self.n_sounding)]
-        )
-        pool.close()
-        pool.join()
-
-        return np.hstack(result)
+        elif self.parallel_option == 'dask':
+            b = db.from_sequence(
+                [(i_src, self.work_dir, self.n_thread) for i_src in range(self.n_sounding)],
+                npartitions=np.ceil(self.n_sounding / self.n_cpu)
+            )
+            b = b.map(run_simulation_skytem)
+            results = b.compute()
+        return np.hstack(results)
