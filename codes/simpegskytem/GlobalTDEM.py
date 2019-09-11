@@ -213,7 +213,9 @@ class GlobalSkyTEM(GlobalAEM):
             'input_currents_dual_moment': self.input_currents_dual_moment[i_src],
             'base_frequency_dual_moment': self.base_frequency_dual_moment[i_src],
         }
-        dill.dump(storage, open(self.work_dir+"inputs_{}.pkl".format(i_src), 'wb'))
+        dill.dump(
+            storage, open(self.work_dir+"inputs_{}.pkl".format(i_src), 'wb')
+        )
 
     def run_simulation(self, i_src):
         if self.verbose:

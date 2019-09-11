@@ -225,3 +225,60 @@ class GlobalAEMSurveyTD(GlobalAEMSurvey):
         if getattr(self, '_nD', None) is None:
             self._nD = self.nD_vec.sum()
         return self._nD
+
+
+def get_skytem_survey(
+    topo,
+    src_locations,
+    rx_locations,
+    time,
+    time_input_currents,
+    input_currents,
+    base_frequency=25,
+    src_type="VMD",
+    rx_type="dBzdt",
+    moment_type="dual",
+    time_dual_moment=None,
+    time_input_currents_dual_moment=None,
+    input_currents_dual_moment=None,
+    base_frequency_dual_moment=210,
+    wave_type="general",
+    field_type="secondary",
+
+):
+
+    n_sounding = src_locations.shape[0]
+    time_list = [time for i in range(n_sounding)]
+    time_dual_moment_list = [time_dual_moment for i in range(n_sounding)]
+    src_type_array = np.array([src_type], dtype=str).repeat(n_sounding)
+    rx_type_array = np.array([rx_type], dtype=str).repeat(n_sounding)
+    wave_type_array = np.array([wave_type], dtype=str).repeat(n_sounding)
+    field_type_array = np.array([field_type], dtype=str).repeat(n_sounding)
+    input_currents_list=[input_currents_HM for i in range(n_sounding)]
+    time_input_currents_list=[time_input_currents_HM for i in range(n_sounding)]
+    base_frequency_array = np.array([base_frequency]).repeat(n_sounding)
+    input_currents_dual_moment_list =[input_currents_LM for i in range(n_sounding)]
+    time_input_currents_dual_moment_list =[time_input_currents_LM for i in range(n_sounding)]
+    base_frequency_dual_moment_list = np.array([base_frequency_dual_moment]).repeat(n_sounding)
+    moment_type_array = np.array([moment_type], dtype=str).repeat(n_sounding)
+
+    survey = GlobalAEMSurveyTD(
+        topo = topo,
+        src_locations = src_locations,
+        rx_locations = rx_locations,
+        src_type = src_type_array,
+        rx_type = rx_type_array,
+        field_type = field_type,
+        time = time_list,
+        wave_type = wave_type_array,
+        moment_type = moment_type_array,
+        time_input_currents = time_input_currents_list,
+        input_currents = input_currents_list,
+        base_frequency = base_frequency_array,
+        time_dual_moment = time_dual_moment_list,
+        time_input_currents_dual_moment = time_input_currents_dual_moment_list,
+        input_currents_dual_moment = input_currents_dual_moment_list,
+        base_frequency_dual_moment = base_frequency_dual_moment_list,
+    )
+
+    return survey
