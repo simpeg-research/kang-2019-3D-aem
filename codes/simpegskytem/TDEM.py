@@ -112,8 +112,9 @@ class ProblemSkyTEM(Problem3D_e):
 
         for ii in range(nSrc):
             step_func = interp1d(
-                self.timeMesh.gridCC, data_stepoff[:, ii]
+                np.log10(self.timeMesh.gridCC), data_stepoff[:, ii]
             )
+
             data_temp = piecewise_pulse_fast(
                                 step_func, time,
                                 time_input_currents, input_currents,
