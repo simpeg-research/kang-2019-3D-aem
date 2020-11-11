@@ -89,7 +89,13 @@ class GlobalAEM(Problem.BaseProblem):
         pass
 
     def clean_work_dir(self):
-        os.system( "rm -rf " + self.work_dir + "*.pkl")
+        import shutil
+        try:
+            shutil.rmtree(self.work_dir)
+        except OSError as e:
+            print ("Error: %s - %s." % (e.filename, e.strerror))        
+                # os.remove(self.work_dir + "*.pkl")
+        # os.system( "rm -rf " + self.work_dir + "*.pkl")
 
 
 class GlobalSkyTEM(GlobalAEM):
@@ -99,7 +105,7 @@ class GlobalSkyTEM(GlobalAEM):
         self.check_regular_mesh()
         if self.work_dir is None:
             self.work_dir = "./tmp/"
-            os.system( "mkdir " + self.work_dir)
+            os.mkdir(self.work_dir)
 
         if self.n_cpu is None:
             self.n_cpu =  multiprocess.cpu_count()
@@ -172,20 +178,23 @@ class GlobalSkyTEM(GlobalAEM):
     @property
     def sigma_padded(self):
         if getattr(self, '_sigma_padded', None) is None:
-            ACTV = self.actv.reshape(
-                (np.prod(self.mesh.vnC[:2]), self.mesh.vnC[2]),
-                order='F'
-            )
-            index_at_topo = (
-                np.arange(np.prod(self.mesh.vnC[:2])) +
-                np.prod(self.mesh.vnC[:2]) * (ACTV.sum(axis=1)-1)
-            )
-            index_at_topo_up = (
-                np.arange(np.prod(self.mesh.vnC[:2])) +
-                np.prod(self.mesh.vnC[:2]) * (ACTV.sum(axis=1))
-            )
-            self._sigma_padded = self.sigma.copy()
-            self._sigma_padded[index_at_topo_up] = self._sigma_padded[index_at_topo]
+            if self.actv.sum() != self.mesh.nC:
+                ACTV = self.actv.reshape(
+                    (np.prod(self.mesh.vnC[:2]), self.mesh.vnC[2]),
+                    order='F'
+                )
+                index_at_topo = (
+                    np.arange(np.prod(self.mesh.vnC[:2])) +
+                    np.prod(self.mesh.vnC[:2]) * (ACTV.sum(axis=1)-1)
+                )
+                index_at_topo_up = (
+                    np.arange(np.prod(self.mesh.vnC[:2])) +
+                    np.prod(self.mesh.vnC[:2]) * (ACTV.sum(axis=1))
+                )
+                self._sigma_padded = self.sigma.copy()
+                self._sigma_padded[index_at_topo_up] = self._sigma_padded[index_at_topo]
+            else:
+               self._sigma_padded  = self.sigma.copy()
         return self._sigma_padded
 
     def write_inputs_on_disk(self, i_src):
