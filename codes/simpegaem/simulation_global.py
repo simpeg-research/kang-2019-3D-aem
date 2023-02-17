@@ -5,7 +5,7 @@ from SimPEG.simulation import BaseSimulation
 import SimPEG.electromagnetics.time_domain as tdem
 import properties
 from pymatsolver import PardisoSolver
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 from multiprocessing import Pool
 
 from .simulation import SimulationAEM
@@ -113,7 +113,10 @@ class GlobalSimulationAEM(BaseSimulation):
     @property
     def f_topo(self):
         if getattr(self, '_f_topo', None) is None:
-            self._f_topo = LinearNDInterpolator(self.topo[:,:2], self.topo[:,2])
+            try:
+                self._f_topo = LinearNDInterpolator(self.topo[:,:2], self.topo[:,2])
+            except:
+                self._f_topo = NearestNDInterpolator(self.topo[:,:2], self.topo[:,2])
         return self._f_topo
 
     @property

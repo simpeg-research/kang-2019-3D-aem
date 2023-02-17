@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from scipy.special import roots_legendre
 from scipy.interpolate import InterpolatedUnivariateSpline as iuSpline
 from SimPEG.electromagnetics.time_domain import Simulation3DElectricField
-from SimPEG.electromagnetics.time_domain.sources import StepOffWaveform
+from SimPEG.electromagnetics.time_domain.sources import StepOffWaveform, PiecewiseLinearWaveform
 from scipy.constants import mu_0
 
 def piecewise_ramp_fast(
@@ -160,10 +160,18 @@ class SimulationAEM(Simulation3DElectricField):
                 np.log10(self.time_mesh.gridCC[:]), voltage_step_off[:, i_src]
             )
             times = src.receiver_list[0].times
-            data_tmp = piecewise_pulse_fast(
-                                step_func, times,
-                                src.waveform.times, src.waveform.currents
-            )
+            if isinstance(src.waveform, StepOffWaveform):
+                data_tmp = step_func(np.log10(times))
+            elif isinstance(src.waveform, PiecewiseLinearWaveform):
+                data_tmp = piecewise_pulse_fast(
+                    step_func, times,
+                    src.waveform.times,
+                    src.waveform.currents
+                )
+            else:
+                raise Exception(
+                    "waveform type should be either StepOffWaveform or PiecewiseLinearWaveform"
+                )
             data.append(data_tmp)
         return np.hstack(data)
 
