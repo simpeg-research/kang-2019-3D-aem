@@ -2,6 +2,7 @@ import numpy as np
 import discretize
 from SimPEG import maps, utils, props
 from SimPEG.simulation import BaseSimulation
+from SimPEG.base import BaseElectricalPDESimulation
 import SimPEG.electromagnetics.time_domain as tdem
 import properties
 from pymatsolver import PardisoSolver
@@ -27,25 +28,25 @@ def run_simulation_time_domain(args):
     dpred = simulation_3d.dpred(sigma_local)
     return dpred
 
-
 class GlobalSimulationAEM(BaseSimulation):
     """
     Base class for the stitched 1D simulation. This simulation models the EM
     response for a set of 1D EM soundings.
     """
 
-    n_cpu = None
-    parallel = False
-    verbose = False
-    topo = properties.Array("Topography (x, y, z)", dtype=float, shape=('*', 3))
-    time_steps = properties.Array("Time steps", dtype=float)
+    sigma, sigmaMap, sigmaDeriv = props.Invertible("Electrical conductivity at infinite frequency (S/m)")
 
-    sigma, sigmaMap, sigmaDeriv = props.Invertible(
-        "Electrical conductivity at infinite frequency (S/m)"
-    )
-
-    def __init__(self, **kwargs):
-        utils.setKwargs(self, **kwargs)
+    def __init__(
+        self, mesh=None, survey=None, sigma=None, sigmaMap=None,
+        topo=None, time_steps=None, parallel=None, n_cpu=None, **kwargs
+    ):
+        super().__init__(mesh=mesh, survey=survey, **kwargs)
+        self.sigma = sigma
+        self.sigmaMap = sigmaMap
+        self.topo = topo
+        self.time_steps = time_steps
+        self.parallel = parallel
+        self.n_cpu = n_cpu
 
         if self.parallel:
             print(">> Use multiprocessing for parallelization")
