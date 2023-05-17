@@ -14,8 +14,11 @@ from .utility import create_local_mesh
 
 
 def run_simulation_time_domain(args):
-    from pyMKL import mkl_set_num_threads
-    mkl_set_num_threads(1)
+    # from pyMKL import mkl_set_num_threads
+    # mkl_set_num_threads(1)
+    import os
+    os.environ['MKL_NUM_THREADS'] = 1
+    
     source, sigma_local, mesh_local, time_steps = args
     survey = tdem.Survey([source])
     simulation_3d = SimulationAEM(
