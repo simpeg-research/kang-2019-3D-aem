@@ -73,6 +73,15 @@ def piecewise_pulse_fast(
 
 class SimulationAEM(Simulation3DElectricField):
     """docstring for SimulationAEM"""
+    def Jvec(self, m, v=None):
+        pass
+
+    def Jtvec(self, m, v=None):
+        pass        
+
+    def dpred_store(self, m):
+        # return data, f
+        # f - sol (e-fields)
 
     def dpred(
         self,
