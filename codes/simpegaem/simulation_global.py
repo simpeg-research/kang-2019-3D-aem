@@ -30,6 +30,8 @@ def run_simulation_time_domain(args):
     )
     dpred = simulation_3d.dpred(sigma_local)
     return dpred
+    # J_sigma = simulation_3d.get_J_sigma(sigma_local)
+    # return dpred, J_sigma
 
 class GlobalSimulationAEM(BaseSimulation):
     """

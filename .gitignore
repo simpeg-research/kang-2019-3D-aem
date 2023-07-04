@@ -1,8 +1,11 @@
 *.pyc
 *.sublime-project
 *.sublime-workspace
+
 .DS_Store
 
 dist/
 build/
 simpegskytem.egg-info/
+notebooks/.ipynb_checkpoints
+
