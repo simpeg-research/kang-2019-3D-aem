@@ -7,10 +7,11 @@ import SimPEG.electromagnetics.time_domain as tdem
 import properties
 from pymatsolver import PardisoSolver
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
-from multiprocessing import Pool
+# from multiprocessing import Pool
 
 from .simulation import SimulationAEM
 from .utility import create_local_mesh
+import dask
 
 
 def run_simulation_time_domain(args):
@@ -46,23 +47,29 @@ class GlobalSimulationAEM(BaseSimulation):
 
     def __init__(
         self, mesh=None, survey=None, sigma=None, sigmaMap=None,
-        topo=None, time_steps=None, parallel=None, n_cpu=None, **kwargs
+        topo=None, time_steps=None, parallel_option='serial', n_cpu=None, **kwargs
     ):
         super().__init__(mesh=mesh, survey=survey, **kwargs)
         self.sigma = sigma
         self.sigmaMap = sigmaMap
         self.topo = topo
+        # TODO: expand to take a variable time_steps for each source
         self.time_steps = time_steps
-        self.parallel = parallel
+        self.parallel_option = parallel_option
         self.n_cpu = n_cpu
 
-        if self.parallel:
+        if self.parallel_option == 'multiprocessing':
             print(">> Use multiprocessing for parallelization")
             if self.n_cpu is None:
                 self.n_cpu = multiprocessing.cpu_count()
             print((">> n_cpu: %i") % (self.n_cpu))
-        else:
+        
+        elif self.parallel_option == 'dask':
+            print(">> Use dask for parallelization")
+        elif self.parallel_option == 'serial':
             print(">> Serial version is used")
+        else:
+            raise Exception("Possible parallel options are multiprocessing, dask, and serial")
 
     def input_args(self, i_src, output_type='forward'):
         args = (
@@ -118,24 +125,35 @@ class GlobalSimulationAEM(BaseSimulation):
         if self.verbose:
             print(">> Compute response")
 
-        if self.parallel:
+        if self.parallel_option != 'serial':
             if self.verbose:
                 print ('parallel')
+            if self.parallel_option == 'multiprocessing':
+                pool = Pool(self.n_cpu)
+                result = pool.map(
+                    run_simulation_time_domain,
+                    [
+                        self.input_args(i_src) for i_src in range(self.n_src)
+                    ]
+                )
+                pool.close()
+                pool.join()
+            elif self.parallel_option == 'dask':
+                lazy_results = []
 
-            pool = Pool(self.n_cpu)
-            result = pool.map(
-                run_simulation_time_domain,
-                [
-                    self.input_args(i_src) for i_src in range(self.n_src)
-                ]
-            )
-            pool.close()
-            pool.join()
+                for i_src in range(self.survey.nSrc):
+                    args = self.input_args(i_src)
+                    lazy_result = dask.delayed(run_simulation_time_domain)(args)
+                    lazy_results.append(lazy_result)
+                    
+                futures = dask.persist(*lazy_results)  # trigger computation in the background  
+                results = dask.compute(*futures)
+
         else:
-            result = [
+            results = [
                 run_simulation_time_domain(self.input_args(i_src)) for i_src in range(self.n_src)
             ]
-        return np.hstack(result)
+        return np.hstack(results)
 
     def getJ_sigma(self, m):
         """
@@ -149,31 +167,43 @@ class GlobalSimulationAEM(BaseSimulation):
         if self.verbose:
             print(">> Compute local J_simga matricies")
 
-        if self.parallel:
-            if self.verbose:
-                print(">> Start pooling")
+        if self.parallel_option != 'serial':
 
-            pool = Pool(self.n_cpu)
+            if self.parallel_option == 'multiprocessing':
+                if self.verbose:
+                    print(">> Start pooling")
 
-            # Deprecate this for now, but revisit later
-            # It is an idea of chunking for parallelization
-            # if self.n_sounding_for_chunk is None:
-            self._Jmatrix_sigma = pool.map(
-                run_simulation_time_domain,
-                [
-                    self.input_args(i_src, output_type='sensitivity_sigma') for i_src in range(self.n_src)
-                ]
-            )
-            if self.verbose:
-                print(">> End pooling")            
+                pool = Pool(self.n_cpu)
+
+                self._Jmatrix_sigma = pool.map(
+                    run_simulation_time_domain,
+                    [
+                        self.input_args(i_src, output_type='sensitivity_sigma') for i_src in range(self.n_src)
+                    ]
+                )
+                if self.verbose:
+                    print(">> End pooling")            
+                
+            elif self.parallel_option == 'dask':
+
+                lazy_results = []
+
+                for i_src in range(self.survey.nSrc):
+                    args = self.input_args(i_src, output_type='sensitivity_sigma')
+                    lazy_result = dask.delayed(run_simulation_time_domain)(args)
+                    lazy_results.append(lazy_result)
+                    
+                futures = dask.persist(*lazy_results)  # trigger computation in the background  
+                self._Jmatrix_sigma = dask.compute(*futures)
+
         else:
-            result = [
+            self._Jmatrix_sigma = [
                 run_simulation_time_domain(self.input_args(i_src, output_type='sensitivity_sigma')) for i_src in range(self.n_src)
             ]            
         if self.verbose:
             print(">> End forming local J_simga matricies")    
 
-        return self._Jmatrix_sigma    
+        return self._Jmatrix_sigma
 
     @property
     def n_src(self):
