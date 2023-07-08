@@ -5,9 +5,10 @@ from scipy.interpolate import interp1d
 from scipy.special import roots_legendre
 from scipy.interpolate import InterpolatedUnivariateSpline as iuSpline
 from SimPEG.electromagnetics.time_domain import Simulation3DElectricField
-from SimPEG.electromagnetics.time_domain.sources import StepOffWaveform, PiecewiseLinearWaveform
+from SimPEG.electromagnetics.time_domain.sources import StepOffWaveform
 from scipy.constants import mu_0
 from SimPEG import utils
+from discretize import TensorMesh
 
 
 # No need to have these functions
@@ -94,67 +95,73 @@ class SimulationAEM(Simulation3DElectricField):
         times_step = self.time_mesh.cell_centers
         C = self.mesh.edge_curl
 
+        # TODO: Generalize this to handle multiple receivers.
         for src in survey.source_list:
             # Assume there is a single receiver
             rx = src.receiver_list[0]
             wave = src.waveform
-
-            t_min = np.infty
-            t_max = -np.infty
-            x, w = roots_legendre(251)
-            times = rx.times - wave.time_nodes[:, None]
-            times[times < 0.0] = 0.0
-            quad_points = (times[:-1] - times[1:])[..., None] * (
-                x + 1
-            ) + times[1:, :, None]
-            t_min = min(quad_points[quad_points > 0].min(), t_min)
-            t_max = max(quad_points[quad_points > 0].max(), t_max)
-            
-            n_t = len(times_step)
-            splines = []
-            for i in range(n_t):
-                e = np.zeros(n_t)
-                e[i] = 1.0
-                sp = iuSpline(np.log(times_step), e, k=5)
-                splines.append(sp)
-            # As will go from frequency to time domain
-
-            def func(t, i):
-                out = np.zeros_like(t)
-                t = t.copy()
-                t[
-                    (t > 0.0) & (t <= times_step.min())
-                ] = times_step.min()  # constant at very low ts
-                out[t > 0.0] = splines[i](np.log(t[t > 0.0])) 
-                # / t[t > 0.0]
-                return out
-
-            # Then calculate the values at each time
-            A = np.zeros((len(rx.times), n_t))
-            # loop over pairs of nodes and use gaussian quadrature to integrate
-
-            time_nodes = wave.time_nodes
-            n_interval = len(time_nodes) - 1
-            quad_times = []
-            for i in range(n_interval):
-                b = rx.times - time_nodes[i]
-                b = np.maximum(b, 0.0)
-                a = rx.times - time_nodes[i + 1]
-                a = np.maximum(a, 0.0)
-                quad_times = (b - a)[:, None] * (x + 1) / 2.0 + a[:, None]
-                quad_scale = (b - a) / 2
-                wave_eval = wave.eval_deriv(rx.times[:, None] - quad_times)
+            if isinstance(wave, StepOffWaveform):
+                log10_time = np.log10(self.time_mesh.cell_centers)
+                ht = np.diff(log10_time)
+                log10_time_mesh = TensorMesh([ht], x0=[log10_time[0]])
+                A = log10_time_mesh.get_interpolation_matrix(np.log10(rx.times), location_type='N')             
+            else:
+                t_min = np.infty
+                t_max = -np.infty
+                x, w = roots_legendre(251)
+                times = rx.times - wave.time_nodes[:, None]
+                times[times < 0.0] = 0.0
+                quad_points = (times[:-1] - times[1:])[..., None] * (
+                    x + 1
+                ) + times[1:, :, None]
+                t_min = min(quad_points[quad_points > 0].min(), t_min)
+                t_max = max(quad_points[quad_points > 0].max(), t_max)
+                
+                n_t = len(times_step)
+                splines = []
                 for i in range(n_t):
-                    A[:, i] -= np.sum(
-                        quad_scale[:, None]
-                        * w
-                        * wave_eval
-                        * func(quad_times, i),
-                        axis=-1,
-                    )
+                    e = np.zeros(n_t)
+                    e[i] = 1.0
+                    sp = iuSpline(np.log(times_step), e, k=5)
+                    splines.append(sp)
+                # As will go from frequency to time domain
+
+                def func(t, i):
+                    out = np.zeros_like(t)
+                    t = t.copy()
+                    t[
+                        (t > 0.0) & (t <= times_step.min())
+                    ] = times_step.min()  # constant at very low ts
+                    out[t > 0.0] = splines[i](np.log(t[t > 0.0])) 
+                    # / t[t > 0.0]
+                    return out
+
+                # Then calculate the values at each time
+                A = np.zeros((len(rx.times), n_t))
+                # loop over pairs of nodes and use gaussian quadrature to integrate
+
+                time_nodes = wave.time_nodes
+                n_interval = len(time_nodes) - 1
+                quad_times = []
+                for i in range(n_interval):
+                    b = rx.times - time_nodes[i]
+                    b = np.maximum(b, 0.0)
+                    a = rx.times - time_nodes[i + 1]
+                    a = np.maximum(a, 0.0)
+                    quad_times = (b - a)[:, None] * (x + 1) / 2.0 + a[:, None]
+                    quad_scale = (b - a) / 2
+                    wave_eval = wave.eval_deriv(rx.times[:, None] - quad_times)
+                    for i in range(n_t):
+                        A[:, i] -= np.sum(
+                            quad_scale[:, None]
+                            * w
+                            * wave_eval
+                            * func(quad_times, i),
+                            axis=-1,
+                        )
             Pts.append(A)
             # Assume only a z-component
-            Pss.append(-self.mesh.getInterpolationMat(rx.locations, locType='Fz') @ C)
+            Pss.append(-self.mesh.get_interpolation_matrix(rx.locations, location_type='Fz') @ C)
         self._convolution_matricies_set = True 
         self._Pts = Pts
         self._Pss = Pss
@@ -232,7 +239,15 @@ class SimulationAEM(Simulation3DElectricField):
             data.append(self._Pts[isrc] @ step_response)
 
         return np.hstack(data)
-
+    
+    # def Jvec(m, v=None):
+    #     J_sigma  = self.getJ_sigma(m)
+    #     return  self_J_sigma @ (self.sigmaMap.Deriv @ v)
+    
+    # def Jtvec:
+    #     J_sigma = self.getJ_sigma(m)
+    #     return  self.sigmaMap.Deriv.T @ (J_sigma.T @ v)
+    
     def getJ_sigma(self, m, f=None):
         
         self.model = m
@@ -240,7 +255,6 @@ class SimulationAEM(Simulation3DElectricField):
         if f is None:
             f = self.fields(m)
 
-        
         eps = 1e-10
         n_steps = self.time_steps.size
         nE = self.mesh.n_edges
@@ -255,7 +269,7 @@ class SimulationAEM(Simulation3DElectricField):
         for i_src, src in enumerate(survey.source_list):
             i_start = survey.vnD[:i_src].sum()
             i_end = i_start + survey.vnD[i_src]
-            
+
             yn = np.zeros((nE, src.nD), dtype=float, order='F')
             yn_1 = np.zeros((nE, src.nD), dtype=float, order='F')
             yn_2 = np.zeros((nE, src.nD), dtype=float, order='F')
@@ -268,7 +282,7 @@ class SimulationAEM(Simulation3DElectricField):
                     # print (tInd)
                     Ainv = self.solver(A)
 
-                pn = (self._Pss[i_src].T) * (self._Pts[i_src].T[tInd,:].reshape([1,-1]))
+                pn = (self._Pss[i_src].T).toarray() * (self._Pts[i_src].T[tInd,:].reshape([1,-1]))
                 if tInd==n_steps-1:
                     yn = Ainv * pn
                 elif tInd==n_steps-2: 
@@ -306,6 +320,7 @@ class SimulationAEM(Simulation3DElectricField):
             print('{}\nSimulating time-domain Airborne EM data\n{}'.format('*'*50, '*'*50))
 
         self.model = m
+        self._compute_evaluation_matricies()
 
         factor = 3/2.
         n_steps = self.time_steps.size
@@ -330,7 +345,7 @@ class SimulationAEM(Simulation3DElectricField):
 
         # Assume only z-component
         # TODO: need to be generalized
-        Fz = self.mesh.getInterpolationMat(rx_locations, locType='Fz')
+        Fz = self.mesh.get_interpolation_matrix(rx_locations, location_type='Fz')
 
         #  Time steps
         dt_0 = 0.

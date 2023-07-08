@@ -17,9 +17,9 @@ def run_simulation_time_domain(args):
     # from pyMKL import mkl_set_num_threads
     # mkl_set_num_threads(1)
     import os
-    os.environ['MKL_NUM_THREADS'] = 1
+    os.environ['MKL_NUM_THREADS'] = "1"
     
-    source, sigma_local, mesh_local, time_steps = args
+    source, sigma_local, mesh_local, time_steps, output_type = args
     survey = tdem.Survey([source])
     simulation_3d = SimulationAEM(
         mesh=mesh_local,
@@ -28,17 +28,20 @@ def run_simulation_time_domain(args):
         solver=PardisoSolver,
         time_steps=time_steps
     )
-    dpred = simulation_3d.dpred(sigma_local)
-    return dpred
-    # J_sigma = simulation_3d.get_J_sigma(sigma_local)
-    # return dpred, J_sigma
+
+    if output_type == "sensitivity_sigma":
+        J_sigma = simulation_3d.getJ_sigma(sigma_local)
+        return J_sigma
+    else:
+        dpred = simulation_3d.dpred_no_store(sigma_local)
+        return dpred
 
 class GlobalSimulationAEM(BaseSimulation):
     """
     Base class for the stitched 1D simulation. This simulation models the EM
     response for a set of 1D EM soundings.
     """
-
+    _Jmatrix_sigma = None
     sigma, sigmaMap, sigmaDeriv = props.Invertible("Electrical conductivity at infinite frequency (S/m)")
 
     def __init__(
@@ -61,12 +64,13 @@ class GlobalSimulationAEM(BaseSimulation):
         else:
             print(">> Serial version is used")
 
-    def input_args(self, i_src):
+    def input_args(self, i_src, output_type='forward'):
         args = (
             self.survey.source_list[i_src],
             self.sigma_locals[i_src],
             self.mesh_locals[i_src],
-            self.time_steps
+            self.time_steps,
+            output_type
         )
         return args
 
@@ -86,6 +90,27 @@ class GlobalSimulationAEM(BaseSimulation):
             f = self.fields(m)
 
         return f
+
+    def Jvec(self, m, v=None):
+
+        J_sigma = self.getJ_sigma(m)
+
+        Jvec = []
+        for i_src in range(self.survey.nSrc):
+            Jvec.append(self._Jmatrix_sigma[i_src] @ (self._P_global_to_locals[i_src] @ (self.sigmaDeriv @ v)))
+        return np.hstack(Jvec)
+
+    def Jtvec(self, m, v=None):
+        
+        J_sigma = self.getJ_sigma(m)
+
+        Jtvec = np.zeros(len(m), dtype=float)
+
+        for i_src in range(self.survey.nSrc):
+            i_start = self.survey.vnD[:i_src].sum()
+            i_end = i_start + self.survey.vnD[i_src]
+            Jtvec += self.sigmaDeriv.T @ (self._P_global_to_locals[i_src].T @ (self._Jmatrix_sigma[i_src].T @ v[i_start:i_end]))
+        return Jtvec
 
     def forward(self, m):
         self.model = m
@@ -111,6 +136,44 @@ class GlobalSimulationAEM(BaseSimulation):
                 run_simulation_time_domain(self.input_args(i_src)) for i_src in range(self.n_src)
             ]
         return np.hstack(result)
+
+    def getJ_sigma(self, m):
+        """
+             Compute d F / d sigma
+        """
+        if self._Jmatrix_sigma is not None:
+            return self._Jmatrix_sigma
+
+        self.model = m
+
+        if self.verbose:
+            print(">> Compute local J_simga matricies")
+
+        if self.parallel:
+            if self.verbose:
+                print(">> Start pooling")
+
+            pool = Pool(self.n_cpu)
+
+            # Deprecate this for now, but revisit later
+            # It is an idea of chunking for parallelization
+            # if self.n_sounding_for_chunk is None:
+            self._Jmatrix_sigma = pool.map(
+                run_simulation_time_domain,
+                [
+                    self.input_args(i_src, output_type='sensitivity_sigma') for i_src in range(self.n_src)
+                ]
+            )
+            if self.verbose:
+                print(">> End pooling")            
+        else:
+            result = [
+                run_simulation_time_domain(self.input_args(i_src, output_type='sensitivity_sigma')) for i_src in range(self.n_src)
+            ]            
+        if self.verbose:
+            print(">> End forming local J_simga matricies")    
+
+        return self._Jmatrix_sigma    
 
     @property
     def n_src(self):
@@ -182,4 +245,6 @@ class GlobalSimulationAEM(BaseSimulation):
         toDelete = []
         if self.sigmaMap is not None:
             toDelete += ['_sigma_locals']
+        if self._Jmatrix_sigma is not None:
+            toDelete += ['_Jmatrix_sigma']
         return toDelete
