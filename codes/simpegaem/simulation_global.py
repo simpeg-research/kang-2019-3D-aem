@@ -100,11 +100,11 @@ class GlobalSimulationAEM(BaseSimulation):
 
     def Jvec(self, m, v=None):
 
-        J_sigma = self.getJ_sigma(m)
+        Jmatrix_sigma = self.getJ_sigma(m)
 
         Jvec = []
         for i_src in range(self.survey.nSrc):
-            Jvec.append(self._Jmatrix_sigma[i_src] @ (self._P_global_to_locals[i_src] @ (self.sigmaDeriv @ v)))
+            Jvec.append(Jmatrix_sigma[i_src] @ (self._P_global_to_locals[i_src] @ (self.sigmaDeriv @ v)))
         return np.hstack(Jvec)
 
     def Jtvec(self, m, v=None):
