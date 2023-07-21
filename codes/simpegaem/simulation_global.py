@@ -7,7 +7,7 @@ import SimPEG.electromagnetics.time_domain as tdem
 import properties
 from pymatsolver import PardisoSolver
 from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
-# from multiprocessing import Pool
+from multiprocessing import Pool
 
 from .simulation import SimulationAEM
 from .utility import create_local_mesh
@@ -130,7 +130,7 @@ class GlobalSimulationAEM(BaseSimulation):
                 print ('parallel')
             if self.parallel_option == 'multiprocessing':
                 pool = Pool(self.n_cpu)
-                result = pool.map(
+                results = pool.map(
                     run_simulation_time_domain,
                     [
                         self.input_args(i_src) for i_src in range(self.n_src)
@@ -138,16 +138,19 @@ class GlobalSimulationAEM(BaseSimulation):
                 )
                 pool.close()
                 pool.join()
-            elif self.parallel_option == 'dask':
-                lazy_results = []
 
-                for i_src in range(self.survey.nSrc):
-                    args = self.input_args(i_src)
-                    lazy_result = dask.delayed(run_simulation_time_domain)(args)
-                    lazy_results.append(lazy_result)
-                    
-                futures = dask.persist(*lazy_results)  # trigger computation in the background  
-                results = dask.compute(*futures)
+            elif self.parallel_option == 'dask':
+
+                with dask.config.set(scheduler='processes'):
+                    lazy_results = []
+
+                    for i_src in range(self.survey.nSrc):
+                        args = self.input_args(i_src)
+                        lazy_result = dask.delayed(run_simulation_time_domain)(args)
+                        lazy_results.append(lazy_result)
+                        
+                    futures = dask.persist(*lazy_results)  # trigger computation in the background  
+                    results = dask.compute(*futures)
 
         else:
             results = [
@@ -186,15 +189,17 @@ class GlobalSimulationAEM(BaseSimulation):
                 
             elif self.parallel_option == 'dask':
 
-                lazy_results = []
-
-                for i_src in range(self.survey.nSrc):
-                    args = self.input_args(i_src, output_type='sensitivity_sigma')
-                    lazy_result = dask.delayed(run_simulation_time_domain)(args)
-                    lazy_results.append(lazy_result)
+                with dask.config.set(scheduler='processes'):
                     
-                futures = dask.persist(*lazy_results)  # trigger computation in the background  
-                self._Jmatrix_sigma = dask.compute(*futures)
+                    lazy_results = []
+
+                    for i_src in range(self.survey.nSrc):
+                        args = self.input_args(i_src, output_type='sensitivity_sigma')
+                        lazy_result = dask.delayed(run_simulation_time_domain)(args)
+                        lazy_results.append(lazy_result)
+                        
+                    futures = dask.persist(*lazy_results)  # trigger computation in the background  
+                    self._Jmatrix_sigma = dask.compute(*futures)
 
         else:
             self._Jmatrix_sigma = [
