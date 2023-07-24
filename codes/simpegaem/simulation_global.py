@@ -84,7 +84,6 @@ class GlobalSimulationAEM(BaseSimulation):
     def fields(self, m):
         if self.verbose:
             print("Compute fields")
-
         return self.forward(m)
 
     def dpred(self, m, f=None):
@@ -109,14 +108,14 @@ class GlobalSimulationAEM(BaseSimulation):
 
     def Jtvec(self, m, v=None):
         
-        J_sigma = self.getJ_sigma(m)
+        Jmatrix_sigma = self.getJ_sigma(m)
 
         Jtvec = np.zeros(len(m), dtype=float)
 
         for i_src in range(self.survey.nSrc):
             i_start = self.survey.vnD[:i_src].sum()
             i_end = i_start + self.survey.vnD[i_src]
-            Jtvec += self.sigmaDeriv.T @ (self._P_global_to_locals[i_src].T @ (self._Jmatrix_sigma[i_src].T @ v[i_start:i_end]))
+            Jtvec += self.sigmaDeriv.T @ (self._P_global_to_locals[i_src].T @ (Jmatrix_sigma[i_src].T @ v[i_start:i_end]))
         return Jtvec
 
     def forward(self, m):
