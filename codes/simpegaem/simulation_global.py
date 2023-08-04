@@ -49,10 +49,9 @@ class GlobalSimulationAEM(BaseSimulation):
         self, mesh=None, survey=None, sigma=None, sigmaMap=None,
         topo=None, time_steps=None, parallel_option='serial', n_cpu=None, **kwargs
     ):
-        super().__init__(mesh=mesh, **kwargs)
+        super().__init__(mesh=mesh, survey=survey, **kwargs)
         self.sigma = sigma
         self.sigmaMap = sigmaMap
-        self.survey = survey
         self.topo = topo
         # TODO: expand to take a variable time_steps for each source
         self.time_steps = time_steps
