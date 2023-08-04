@@ -49,7 +49,7 @@ class GlobalSimulationAEM(BaseSimulation):
         self, mesh=None, survey=None, sigma=None, sigmaMap=None,
         topo=None, time_steps=None, parallel_option='serial', n_cpu=None, **kwargs
     ):
-        super().__init__(mesh=mesh, survey=survey, **kwargs)
+        super().__init__(mesh=mesh, **kwargs)
         self.sigma = sigma
         self.sigmaMap = sigmaMap
         self.topo = topo
