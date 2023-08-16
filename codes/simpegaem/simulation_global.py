@@ -97,7 +97,7 @@ class GlobalSimulationAEM(BaseSimulation):
 
         return f
 
-    def Jvec(self, m, v=None):
+    def Jvec(self, m, v, f=None):
 
         Jmatrix_sigma = self.getJ_sigma(m)
 
@@ -106,7 +106,7 @@ class GlobalSimulationAEM(BaseSimulation):
             Jvec.append(Jmatrix_sigma[i_src] @ (self._P_global_to_locals[i_src] @ (self.sigmaDeriv @ v)))
         return np.hstack(Jvec)
 
-    def Jtvec(self, m, v=None):
+    def Jtvec(self, m, v, f=None):
         
         Jmatrix_sigma = self.getJ_sigma(m)
 
